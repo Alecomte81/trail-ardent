@@ -108,6 +108,26 @@ body.poster .poster-title{display:block}
   .poster-title{display:none}
   body.poster .poster-title{display:block}
 }
+
+/* poster with side legend */
+#side{display:none}
+body.side #app{grid-template-columns:1fr 600px;grid-template-rows:1fr}
+body.side header, body.side aside, body.side .mapctl, body.side .poster-title, body.side .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group{display:none !important}
+body.side #side{display:flex;flex-direction:column;background:#fff;color:#16191d;padding:40px 40px 28px;border-left:1px solid #e3e6ea;overflow:hidden}
+#side .t1{font-size:44px;font-weight:800;letter-spacing:.1em;line-height:1}
+#side .t2{font-size:20px;color:#4b545e;margin:10px 0 2px}
+#side .t3{font-size:15px;color:#7a838d;margin-bottom:22px}
+#side h4{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#7a838d;margin:18px 0 8px;border-bottom:1px solid #e3e6ea;padding-bottom:6px}
+#side .lg{font-size:15.5px;gap:12px;margin:5px 0}
+#side .sw{width:46px;height:9px}
+#side .grp{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;margin:10px 0 4px}
+#side .grp i{width:14px;height:14px;border-radius:50%;display:inline-block}
+#side .rows{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px}
+#side .r{display:flex;align-items:center;gap:8px;font-size:14px;line-height:1.15}
+#side .r .badge{width:26px;height:26px;font-size:11.5px;flex:none;border-width:2px}
+#side .r small{color:#7a838d;display:block;font-size:11.5px}
+#side .foot{margin-top:auto;font-size:11.5px;color:#7a838d;line-height:1.45;padding-top:14px}
+#side .tip{background:#f2f4f6;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.4;margin-top:14px}
 </style>
 </head>
 <body>
@@ -143,6 +163,7 @@ body.poster .poster-title{display:block}
     </div>
   </div>
 
+  <div id="side"></div>
   <aside>
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-tab="pistes">Pistes</button>
@@ -396,7 +417,7 @@ function go(z, instant){
   const cam = cameraFor(z);
   instant ? map.jumpTo(cam) : map.flyTo({...cam, duration:1800, essential:true});
   document.getElementById('posterSub').textContent = ZONES[z].name + ' — ' + ZONES[z].sub;
-  renderList();
+  renderList(); if (document.body.classList.contains('side')) renderSide();
 }
 document.getElementById('zones').addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) { clearSel(); go(b.dataset.zone); } });
 document.getElementById('dim').addEventListener('click', e=>{
@@ -603,12 +624,41 @@ for (const ev of ['dragstart','zoomstart','rotatestart','pitchstart']) map.on(ev
 const _go = go; go = (z, instant) => { userMoved = false; _go(z, instant); };
 map.on('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (!userMoved) _go(zone, true); }, 250); });
 
+
+function renderSide(){
+  const list = specials.filter(ZONES[zone].has).sort((a,b)=>(+a.num)-(+b.num));
+  const km = list.reduce((a,s)=>a+s.len,0), dn = list.filter(s=>s.kind==='descent').reduce((a,s)=>a+s.dn,0);
+  let groups = '';
+  for (const c of ORDER){
+    const g = list.filter(s=>s.color===c); if(!g.length) continue;
+    groups += `<div class="grp"><i style="background:${COLORS[c]}"></i>${c==='mauve'?'Montées techniques (MT)':LABEL[c]}</div><div class="rows">` +
+      g.map(s=>`<div class="r"><div class="badge ${s.color}">${s.num}</div><div>${s.name}<small>${fmtKm(s.len)} · ${s.kind==='climb'?'+'+s.up:'−'+s.dn} m</small></div></div>`).join('') + '</div>';
+  }
+  const hasBg = zone==='bsj' || zone==='all';
+  document.getElementById('side').innerHTML = `
+    <div class="t1">TRAIL ARDENT</div>
+    <div class="t2">${ZONES[zone].name}</div>
+    <div class="t3">${list.length} spéciales · ${fmtKm(km)} de trails · ${dn} m de descente</div>
+    <h4>Pistes</h4>${groups}
+    <h4>Liaisons & repères</h4>
+    <div class="legend">
+      <div class="lg"><span class="sw climb"></span>Montée balisée · sens unique (↑ dénivelé)</div>
+      <div class="lg"><span class="sw dash"></span>Liaison balisée jaune · double sens</div>
+      ${hasBg?'<div class="lg"><span class="sw" style="background:repeating-linear-gradient(90deg,#111 0 8px,#fff 8px 13px);box-shadow:0 0 0 1px #111 inset"></span>Accès ADEPS Blanc Gravier → 8 & 9 · 4 km, +53 m</div>':''}
+      <div class="lg"><span style="width:46px;display:grid;place-items:center"><span class="badge rouge" style="width:26px;height:26px;font-size:11px">11</span></span>Départ de la spéciale (n° du balisage)</div>
+      <div class="lg"><span style="width:46px;display:grid;place-items:center"><span style="width:13px;height:13px;border-radius:50%;border:3px solid #e0262b;background:#fff"></span></span>Arrivée de la spéciale</div>
+      <div class="lg"><span style="width:46px;text-align:center;font-size:18px">⚠️</span>Traversée de route / chemin : ralentis</div>
+    </div>
+    <div class="tip"><b>Comment lire le plan ?</b> On descend chaque spéciale depuis son rond numéroté, dans le sens des flèches blanches. On remonte par les montées orange ou les liaisons jaunes. Les numéros sont ceux des panneaux sur le terrain.</div>
+    <div class="foot">Vue 3D depuis la vallée, relief exagéré ×1,5. Altitudes et dénivelés : LiDAR Wallonie 2021-22. Orthophoto été 2023 © SPW – WalOnMap · Relief © Mapterhorn · © OpenStreetMap. Trail center en finalisation : le balisage sur place fait foi.</div>`;
+}
+
 // ---------- boot ----------
 const qs = new URLSearchParams(location.search);
 map.once('load', ()=>{
   renderTours();
   if (qs.get('dim')==='2d') document.querySelector('#dim [data-v="2d"]').click();
-  if (qs.get('poster')) document.body.classList.add('poster');
+  if (qs.get('poster')==='side') { document.body.classList.add('side','poster'); } else if (qs.get('poster')) document.body.classList.add('poster');
   map.resize();
   go(qs.get('zone') || 'all', true);
   if (qs.get('sel')) select(qs.get('sel'), true);
