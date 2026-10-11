@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Trail Ardent – Plan des pistes</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="data.js"></script>
+<style>
+:root{
+  --vert:#1f9d3a; --bleu:#1b5fd1; --rouge:#e0262b; --noir:#141414; --mauve:#9b2fae;
+  --jaune:#ffd21f; --montee:#ff8a00;
+  --ink:#16191d; --muted:#5d6672; --line:#e3e6ea; --bg:#ffffff; --panel:#ffffff; --chip:#f2f4f6;
+  --accent:#0b5cad;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --ink:#eef1f4; --muted:#a3acb7; --line:#2c323a; --bg:#121518; --panel:#171b1f; --chip:#232930; --noir:#000; --accent:#6aa9ff;}
+}
+:root[data-theme="dark"]{ --ink:#eef1f4; --muted:#a3acb7; --line:#2c323a; --bg:#121518; --panel:#171b1f; --chip:#232930; --noir:#000; --accent:#6aa9ff;}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.4 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+#app{position:fixed;inset:0;display:grid;grid-template-columns:1fr 380px;grid-template-rows:auto 1fr}
+header{grid-column:1/-1;display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);z-index:3}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{width:34px;height:34px;border-radius:9px;background:#0f1418;display:grid;place-items:center;flex:none}
+.brand h1{font-size:17px;margin:0;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.brand small{display:block;color:var(--muted);font-size:12px;letter-spacing:0;text-transform:none;font-weight:400}
+nav.zones{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+nav.zones button{border:1px solid var(--line);background:var(--chip);color:var(--ink);padding:7px 12px;border-radius:999px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap}
+nav.zones button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+nav.zones button span{font-weight:400;opacity:.7;margin-left:4px}
+#map{position:relative;min-height:0}
+aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
+.tabs{display:flex;position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);z-index:2}
+.tabs button{flex:1;border:0;background:none;padding:12px 6px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--ink)}
+.pane{padding:12px 14px 24px}
+.pane[hidden]{display:none}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:16px 0 8px}
+h2:first-child{margin-top:4px}
+.trail{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:8px 8px;border-radius:10px;cursor:pointer}
+.trail:hover,.trail.sel{background:var(--chip)}
+.badge{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:800;font-size:12.5px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.badge.vert{background:var(--vert)}.badge.bleu{background:var(--bleu)}.badge.rouge{background:var(--rouge)}.badge.noir{background:var(--noir)}.badge.mauve{background:var(--mauve)}
+.badge.sq{border-radius:6px}
+.badge.noir{background:#141414}
+.tname{font-weight:600;line-height:1.2}
+.tmeta{color:var(--muted);font-size:12px}
+.tnum{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px;text-align:right;white-space:nowrap}
+.legend{display:grid;gap:7px}
+.lg{display:flex;align-items:center;gap:10px}
+.sw{width:34px;height:8px;border-radius:4px;flex:none}
+.sw.dash{background:repeating-linear-gradient(90deg,var(--jaune) 0 8px,transparent 8px 13px);height:5px;box-shadow:0 0 0 1.5px #3b3b3b inset}
+.sw.climb{background:var(--montee);position:relative}
+.sw.climb::after{content:"›››";position:absolute;inset:-6px 0 0 6px;color:#fff;font-weight:900;font-size:13px;letter-spacing:2px}
+.note{background:var(--chip);border-radius:10px;padding:10px 12px;color:var(--muted);font-size:12.5px;margin-top:12px}
+.note b{color:var(--ink)}
+.card{border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+.card .head{display:flex;gap:10px;align-items:center}
+.card .head .badge{width:36px;height:36px;font-size:15px}
+.card h3{margin:0;font-size:17px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:12px 0 8px}
+.stat{background:var(--chip);border-radius:9px;padding:7px 8px}
+.stat b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--muted)}
+.feats{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.feat{background:var(--chip);border-radius:999px;padding:3px 9px;font-size:12px}
+.btn{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:999px;background:var(--ink);color:var(--bg);padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+.btn.ghost{background:var(--chip);color:var(--ink)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+svg.prof{width:100%;height:96px;display:block}
+.tour{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px;cursor:pointer}
+.tour.sel{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.tour b{font-size:15px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+.chips .badge{width:22px;height:22px;font-size:10px;border-width:1.5px}
+/* map overlay controls */
+.mapctl{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:8px;z-index:2}
+.seg{display:flex;background:rgba(255,255,255,.95);border-radius:999px;padding:3px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.seg button{border:0;background:none;padding:6px 11px;border-radius:999px;font:inherit;font-size:12.5px;font-weight:600;color:#222;cursor:pointer}
+.seg button[aria-pressed="true"]{background:#16191d;color:#fff}
+.poster-title{display:none;position:absolute;left:16px;bottom:16px;z-index:2;background:rgba(255,255,255,.94);color:#16191d;border-radius:16px;padding:12px 16px;box-shadow:0 2px 10px rgba(0,0,0,.25);max-width:min(560px,calc(100% - 32px))}
+.poster-title h2{margin:0;color:#16191d;font-size:20px;letter-spacing:.08em}
+.poster-title p{margin:2px 0 8px;color:#4b545e;font-size:12.5px}
+.poster-title .legend{grid-template-columns:repeat(3,auto);gap:6px 14px;font-size:12px}
+.poster-title .badge{width:20px;height:20px;font-size:10px;border-width:1.5px}
+.compass{position:absolute;right:12px;top:12px;z-index:2;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.95);box-shadow:0 1px 4px rgba(0,0,0,.3);display:grid;place-items:center;cursor:pointer;border:0}
+.maplibregl-ctrl-attrib{font-size:10px}
+body.poster aside, body.poster header{display:none}
+body.poster #app{grid-template-columns:1fr;grid-template-rows:1fr}
+body.poster .mapctl{display:none}
+body.poster .poster-title{display:block}
+.popup h4{margin:0 0 2px;font-size:14px}
+.popup p{margin:0;color:#4b545e;font-size:12px}
+.maplibregl-popup-content{border-radius:12px;padding:10px 12px;color:#16191d}
+@media (max-width: 860px){
+  #app{grid-template-columns:1fr;grid-template-rows:auto 1fr 34vh}
+  .brand small{display:none}
+  .mapctl{gap:6px;left:8px;top:8px}
+  .seg button{padding:6px 10px}
+  #posterBtn,#pngBtn{display:none}
+  #posterBtn,#pngBtn{display:none}
+  .mapctl .seg:nth-child(3),.mapctl .seg:nth-child(4){display:none}
+  aside{border-left:0;border-top:1px solid var(--line)}
+  header{flex-wrap:wrap;gap:8px;padding:8px 12px}
+  nav.zones{margin-left:0;width:100%;overflow-x:auto;flex-wrap:nowrap}
+  .poster-title{display:none}
+  body.poster .poster-title{display:block}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24"><path d="M2 20 L9 8 L13 14 L16 10 L22 20 Z" fill="#fff"/><circle cx="17" cy="5" r="2.2" fill="#ffd21f"/></svg>
+      </div>
+      <h1>Trail Ardent <small>Plan des pistes · Liège – Sart-Tilman · Seraing · Neupré</small></h1>
+    </div>
+    <nav class="zones" id="zones">
+      <button data-zone="all" aria-pressed="true">Vue d'ensemble</button>
+      <button data-zone="bsj" aria-pressed="false">Bois St-Jean<span>5–28</span></button>
+      <button data-zone="kink" aria-pressed="false">Kinkempois<span>1–4</span></button>
+      <button data-zone="seraing" aria-pressed="false">Seraing<span>70–78</span></button>
+      <button data-zone="neupre" aria-pressed="false">Neupré<span>50–58</span></button>
+    </nav>
+  </header>
+
+  <div id="map">
+    <div class="mapctl">
+      <div class="seg" id="dim"><button data-v="3d" aria-pressed="true">3D</button><button data-v="2d" aria-pressed="false">2D</button></div>
+      <div class="seg" id="base"><button data-v="photo" aria-pressed="true">Photo</button><button data-v="relief" aria-pressed="false">Relief</button></div>
+      <div class="seg"><button id="posterBtn" aria-pressed="false" title="Masquer l'interface pour une capture">Mode affiche</button></div>
+      <div class="seg"><button id="pngBtn" aria-pressed="false" title="Télécharger la vue en image">Exporter PNG</button></div>
+    </div>
+    <button class="compass" id="compass" title="Remettre le nord en haut"><svg width="22" height="22" viewBox="0 0 24 24" id="needle"><path d="M12 2 L16 12 L12 10.5 L8 12 Z" fill="#e0262b"/><path d="M12 22 L8 12 L12 13.5 L16 12 Z" fill="#888"/></svg></button>
+    <div class="poster-title" id="posterTitle">
+      <h2>TRAIL ARDENT</h2>
+      <p id="posterSub">Plan des pistes</p>
+      <div class="legend" id="posterLegend"></div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="pistes">Pistes</button>
+      <button role="tab" aria-selected="false" data-tab="boucles">Boucles GPS</button>
+      <button role="tab" aria-selected="false" data-tab="legende">Légende</button>
+    </div>
+    <div class="pane" id="pane-pistes"></div>
+    <div class="pane" id="pane-boucles" hidden></div>
+    <div class="pane" id="pane-legende" hidden></div>
+  </aside>
+</div>
+
+<script>
+const T = window.TA;
+const COLORS = {vert:'#1f9d3a', bleu:'#1b5fd1', rouge:'#e0262b', noir:'#141414', mauve:'#9b2fae'};
+const LABEL = {vert:'Facile', bleu:'Intermédiaire', rouge:'Difficile', noir:'Expert', mauve:'Montée technique (MT)'};
+const ZONES = {
+  all:{name:"Vue d'ensemble", sub:'3 secteurs · 40 spéciales · liaisons balisées', has:s=>true},
+  bsj:{name:'Sart-Tilman · Bois Saint-Jean', sub:'Spéciales 5 à 28', has:s=>s.zone==='sart' && +s.num>=5},
+  kink:{name:'Angleur · Kinkempois', sub:'Spéciales 1 à 4', has:s=>s.zone==='sart' && +s.num<=4},
+  seraing:{name:'Seraing', sub:'Spéciales 70 à 78 · Départ / Arrivée balisés', has:s=>s.zone==='seraing'},
+  neupre:{name:'Neupré', sub:'Spéciales 50 à 58 · secteur en cours de finalisation', has:s=>s.zone==='neupre'}
+};
+const ORDER = ['vert','bleu','rouge','noir','mauve'];
+const FEAT = {jump:'Sauts', drop:'Drops', berm:'Virages relevés', north:'Passerelles / northshore', whoops:'Whoops', rock:'Pierriers', hairpin:'Épingles', chicken:'Ligne de contournement'};
+
+const specials = T.specials.filter(s => !s.variant);
+const byNum = Object.fromEntries(specials.map(s => [s.num, s]));
+
+// ---------- GeoJSON ----------
+const fc = feats => ({type:'FeatureCollection', features:feats});
+const line = (coords, props) => ({type:'Feature', properties:props, geometry:{type:'LineString', coordinates:coords.map(c=>[c[0],c[1]])}});
+const point = (p, props) => ({type:'Feature', properties:props, geometry:{type:'Point', coordinates:[p[0],p[1]]}});
+const gjSpecials = fc(T.specials.map(s => line(s.coords, {num:s.num, id:s.id, name:s.name, color:s.color, kind:s.kind, variant:!!s.variant, zone:s.zone})));
+const gjLiaisons = fc(T.liaisons.map((l,i) => line(l.coords, {kind:l.kind, up:l.up, len:l.len, zone:l.zone, i})));
+// co-located departures (same junction) are fanned out side by side
+const startGroups = [];
+for (const sp of specials){
+  const p = sp.coords[0];
+  let g = startGroups.find(g => dist2(g.p, p) < 25);
+  if (!g) startGroups.push(g = {p, items:[]});
+  g.items.push(sp);
+}
+function dist2(a,b){ const dx=(a[0]-b[0])*111320*Math.cos(a[1]*Math.PI/180), dy=(a[1]-b[1])*110540; return Math.hypot(dx,dy); }
+const gjStarts = fc(startGroups.flatMap(g => g.items.sort((a,b)=>(+a.num)-(+b.num)).map((sp,i) =>
+  point(g.p, {num:sp.num, name:sp.name, color:sp.color, kind:sp.kind, zone:sp.zone, ox:(i-(g.items.length-1)/2)*54, n:g.items.length,
+    label: g.items.length>1 && i===0 ? g.items.map(x=>x.num+' '+x.name).join(String.fromCharCode(10)) : (g.items.length>1 ? '' : sp.name)}))));
+const gjEnds = fc(specials.filter(s=>s.kind!=='loop').map(s => point(s.coords[s.coords.length-1], {color:s.color})));
+const gjPoi = fc(T.poi.map(p => point(p.p, {...p, p:undefined})));
+// climb labels on one-way liaisons with real elevation gain
+const gjClimbLbl = fc(T.liaisons.filter(l => l.kind==='oneway' && l.up>=25).map(l => {
+  const m = l.coords[Math.floor(l.coords.length/2)]; return point(m, {label:'↑ ' + l.up + ' m'});
+}));
+
+// ---------- Map ----------
+const WMS = (svc, fmt) => `https://geoservices.wallonie.be/arcgis/services/${svc}/MapServer/WMSServer?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=0&STYLES=&FORMAT=${fmt}&TRANSPARENT=FALSE&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=512&HEIGHT=512`;
+const map = new maplibregl.Map({
+  container:'map',
+  canvasContextAttributes:{preserveDrawingBuffer:true},
+  preserveDrawingBuffer:true,
+  attributionControl:{compact:true},
+  maxPitch:75,
+  style:{
+    version:8,
+    glyphs:'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+    sources:{
+      ortho:{type:'raster', tiles:[WMS('IMAGERIE/ORTHO_2023_ETE','image/jpeg')], tileSize:512, maxzoom:19,
+        attribution:'Orthophoto été 2023 & LiDAR © <a href="https://geoportail.wallonie.be">SPW – WalOnMap</a>'},
+      hill:{type:'raster', tiles:[WMS('RELIEF/WALLONIE_MNT_2021_2022_HILLSHADE','image/png')], tileSize:512, maxzoom:18},
+      dem:{type:'raster-dem', tiles:['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'], tileSize:512, encoding:'terrarium', maxzoom:15,
+        attribution:'Relief 3D © <a href="https://mapterhorn.com/attribution">Mapterhorn</a>'},
+      omt:{type:'vector', url:'https://tiles.openfreemap.org/planet',
+        attribution:'© <a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'},
+      specials:{type:'geojson', data:gjSpecials},
+      liaisons:{type:'geojson', data:gjLiaisons},
+      starts:{type:'geojson', data:gjStarts},
+      ends:{type:'geojson', data:gjEnds},
+      poi:{type:'geojson', data:gjPoi},
+      climblbl:{type:'geojson', data:gjClimbLbl},
+      bgline:{type:'geojson', data:fc((T.tours||[]).filter(t=>t.slug==='blanc-gravier-8-9').map(t=>line(t.coords,{})))},
+      sel:{type:'geojson', data:fc([])},
+      tour:{type:'geojson', data:fc([])}
+    },
+    sky:{'sky-color':'#bcd7f2','horizon-color':'#eef4fa','fog-color':'#e9eef3','sky-horizon-blend':0.6,'horizon-fog-blend':0.6,'fog-ground-blend':0.85,'atmosphere-blend':0.6},
+    terrain:{source:'dem', exaggeration:1.5},
+    layers:[
+      {id:'bg', type:'background', paint:{'background-color':'#dfe6dc'}},
+      {id:'ortho', type:'raster', source:'ortho', paint:{'raster-saturation':0.05,'raster-contrast':0.08,'raster-brightness-min':0.06,'raster-brightness-max':1}},
+      {id:'hill', type:'raster', source:'hill', paint:{'raster-opacity':0.28}},
+      // place & road names from OpenStreetMap for orientation
+      {id:'roads-lbl', type:'symbol', source:'omt', 'source-layer':'transportation_name', minzoom:14,
+        filter:['in',['get','class'],['literal',['primary','secondary','tertiary','minor','trunk']]],
+        layout:{'symbol-placement':'line','text-field':['get','name'],'text-font':['Noto Sans Regular'],'text-size':11,'text-max-angle':30},
+        paint:{'text-color':'#2b2b2b','text-halo-color':'rgba(255,255,255,.85)','text-halo-width':1.4}},
+      {id:'places', type:'symbol', source:'omt', 'source-layer':'place',
+        filter:['any',['in',['get','class'],['literal',['city','town']]],['all',['>=',['zoom'],12.5],['in',['get','class'],['literal',['village','suburb']]]],['all',['>=',['zoom'],15],['in',['get','class'],['literal',['quarter','neighbourhood','hamlet']]]]],
+        layout:{'text-field':['get','name'],'text-font':['Noto Sans Regular'],'text-size':['match',['get','class'],'city',15,'town',13.5,'village',12,11],'text-padding':12},
+        paint:{'text-color':'#1d232a','text-halo-color':'rgba(255,255,255,.85)','text-halo-width':1.4,'text-opacity':0.85}},
+
+      // liaisons
+      {id:'liaison-case', type:'line', source:'liaisons', filter:['==',['get','kind'],'liaison'],
+        layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#2b2b2b','line-width':['interpolate',['linear'],['zoom'],12,3,16,6],'line-opacity':0.75}},
+      {id:'liaison', type:'line', source:'liaisons', filter:['==',['get','kind'],'liaison'],
+        layout:{'line-cap':'butt','line-join':'round'}, paint:{'line-color':'#ffd21f','line-width':['interpolate',['linear'],['zoom'],12,1.8,16,3.6],'line-dasharray':[2.2,1.4]}},
+      {id:'oneway-case', type:'line', source:'liaisons', filter:['==',['get','kind'],'oneway'],
+        layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],12,4,16,8]}},
+      {id:'oneway', type:'line', source:'liaisons', filter:['==',['get','kind'],'oneway'],
+        layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#ff8a00','line-width':['interpolate',['linear'],['zoom'],12,2.4,16,5]}},
+      {id:'oneway-arrows', type:'symbol', source:'liaisons', filter:['==',['get','kind'],'oneway'],
+        layout:{'symbol-placement':'line','symbol-spacing':['interpolate',['linear'],['zoom'],13,60,17,90],'icon-image':'chev-w','icon-size':['interpolate',['linear'],['zoom'],12,0.35,16,0.6],'icon-allow-overlap':true,'icon-ignore-placement':true,'icon-rotation-alignment':'map','icon-pitch-alignment':'map'}},
+
+      {id:'bg-case', type:'line', source:'bgline', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],12,5,16,9]}},
+      {id:'bg-line', type:'line', source:'bgline', layout:{'line-cap':'butt','line-join':'round'}, paint:{'line-color':'#111111','line-width':['interpolate',['linear'],['zoom'],12,2.5,16,4.5],'line-dasharray':[1.6,1.1]}},
+      {id:'bg-lbl', type:'symbol', source:'bgline', minzoom:13.5, layout:{'symbol-placement':'line','text-field':'Accès ADEPS Blanc Gravier → 8 & 9','text-font':['Noto Sans Bold'],'text-size':11.5,'symbol-spacing':400}, paint:{'text-color':'#111','text-halo-color':'#fff','text-halo-width':2}},
+      // specials
+      {id:'sp-case', type:'line', source:'specials', layout:{'line-cap':'round','line-join':'round'},
+        paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],12,['case',['get','variant'],3,5.5],16,['case',['get','variant'],6,11]]}},
+      {id:'sp', type:'line', source:'specials', layout:{'line-cap':'round','line-join':'round'},
+        paint:{'line-color':['match',['get','color'],'vert',COLORS.vert,'bleu',COLORS.bleu,'rouge',COLORS.rouge,'noir',COLORS.noir,'mauve',COLORS.mauve,'#888'],
+               'line-width':['interpolate',['linear'],['zoom'],12,['case',['get','variant'],1.5,3],16,['case',['get','variant'],3,6.5]]}},
+      {id:'sp-arrows', type:'symbol', source:'specials', minzoom:14, filter:['!',['get','variant']],
+        layout:{'symbol-placement':'line','symbol-spacing':['interpolate',['linear'],['zoom'],14,70,17,110],'icon-image':'chev-w','icon-size':['interpolate',['linear'],['zoom'],14,0.32,17,0.55],'icon-allow-overlap':true,'icon-ignore-placement':true,'icon-rotation-alignment':'map','icon-pitch-alignment':'map'}},
+
+      // selection & tour highlight
+      {id:'tour-glow', type:'line', source:'tour', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#00e5ff','line-width':['interpolate',['linear'],['zoom'],12,9,16,16],'line-opacity':0.45,'line-blur':2}},
+      {id:'tour-line', type:'line', source:'tour', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#00b8d9','line-width':['interpolate',['linear'],['zoom'],12,2,16,3.5]}},
+      {id:'tour-arrows', type:'symbol', source:'tour', layout:{'symbol-placement':'line','symbol-spacing':70,'icon-image':'chev-c','icon-size':0.45,'icon-allow-overlap':true,'icon-ignore-placement':true,'icon-rotation-alignment':'map','icon-pitch-alignment':'map'}},
+      {id:'sel-glow', type:'line', source:'sel', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':'#ffffff','line-width':['interpolate',['linear'],['zoom'],12,12,16,22],'line-opacity':0.85,'line-blur':3}},
+      {id:'sel-line', type:'line', source:'sel', layout:{'line-cap':'round','line-join':'round'}, paint:{'line-color':['match',['get','color'],'vert',COLORS.vert,'bleu',COLORS.bleu,'rouge',COLORS.rouge,'noir',COLORS.noir,'mauve',COLORS.mauve,'#888'],'line-width':['interpolate',['linear'],['zoom'],12,4,16,8]}},
+
+      // labels on climbs
+      {id:'climb-lbl', type:'symbol', source:'climblbl', minzoom:14.2,
+        layout:{'text-field':['get','label'],'text-font':['Noto Sans Bold'],'text-size':11.5,'text-offset':[0,-1.1]},
+        paint:{'text-color':'#7a3e00','text-halo-color':'#fff','text-halo-width':1.8}},
+
+      // POIs
+      {id:'warn', type:'symbol', source:'poi', minzoom:14.5, filter:['==',['get','t'],'warn'],
+        layout:{'icon-image':'warn','icon-size':0.5,'icon-allow-overlap':false}},
+      {id:'feat', type:'symbol', source:'poi', minzoom:16.3, filter:['in',['get','t'],['literal',['f_jump','f_drop','f_north']]],
+        layout:{'icon-image':['match',['get','t'],'f_jump','i-jump','f_drop','i-drop','i-north'],'icon-size':0.42,'icon-allow-overlap':false}},
+      {id:'stickers', type:'symbol', source:'poi', minzoom:15.8, filter:['==',['get','t'],'sticker'],
+        layout:{'icon-image':'sign','icon-size':0.42,'text-field':['concat','→ ',['get','text']],'text-font':['Noto Sans Bold'],'text-size':10.5,'text-offset':[0,1.25],'text-anchor':'top','text-optional':true},
+        paint:{'text-color':'#2b2b2b','text-halo-color':'#fff','text-halo-width':1.5}},
+      {id:'ends', type:'circle', source:'ends', minzoom:14.5,
+        paint:{'circle-radius':4,'circle-color':'#fff','circle-stroke-width':2.4,'circle-stroke-color':['match',['get','color'],'vert',COLORS.vert,'bleu',COLORS.bleu,'rouge',COLORS.rouge,'noir',COLORS.noir,'mauve',COLORS.mauve,'#888']}},
+      {id:'jumpline', type:'symbol', source:'poi', minzoom:14.5, filter:['==',['get','t'],'jumpline'],
+        layout:{'icon-image':['concat','sq-',['get','color']],'icon-size':0.55,'text-field':['get','name'],'text-font':['Noto Sans Bold'],'text-size':11,'text-offset':[0.9,0],'text-anchor':'left','icon-allow-overlap':true},
+        paint:{'text-color':'#111','text-halo-color':'#fff','text-halo-width':1.6}},
+      {id:'hub', type:'symbol', source:'poi', filter:['in',['get','t'],['literal',['depart','arrivee']]],
+        layout:{'icon-image':['match',['get','t'],'depart','hub-d','hub-a'],'icon-size':0.6,'icon-allow-overlap':true,
+                'text-field':['match',['get','t'],'depart','Départ','Arrivée'],'text-font':['Noto Sans Bold'],'text-size':12.5,'text-offset':[0,1.6],'text-anchor':'top'},
+        paint:{'text-color':'#111','text-halo-color':'#fff','text-halo-width':2}},
+      {id:'start-lbl', type:'symbol', source:'starts', minzoom:13.6, filter:['!=',['get','label'],''],
+        layout:{'text-field':['get','label'],'text-font':['Noto Sans Bold'],'text-size':['interpolate',['linear'],['zoom'],13.6,10.5,16,12.5],
+                'text-variable-anchor':['left','right','top','bottom'],'text-radial-offset':['+',0.6,['*',['get','n'],0.95]],'text-justify':'auto','text-padding':2},
+        paint:{'text-color':'#111','text-halo-color':'rgba(255,255,255,.95)','text-halo-width':2}},
+      {id:'start-badge', type:'symbol', source:'starts',
+        layout:{'icon-image':['concat','n-',['get','num']],'icon-size':['interpolate',['linear'],['zoom'],11,0.5,14,0.62,17,0.85],
+                'icon-offset':['match',['get','ox'],-81,['literal',[-81,0]],-54,['literal',[-54,0]],-27,['literal',[-27,0]],27,['literal',[27,0]],54,['literal',[54,0]],81,['literal',[81,0]],['literal',[0,0]]],'icon-allow-overlap':true,'icon-ignore-placement':false,
+                'symbol-sort-key':['to-number',['get','num']]}}
+    ]
+  }
+});
+window.TAmap = map;
+map.addControl(new maplibregl.NavigationControl({visualizePitch:true, showCompass:false}), 'bottom-right');
+map.addControl(new maplibregl.GeolocateControl({positionOptions:{enableHighAccuracy:true}, trackUserLocation:true, showAccuracyCircle:true}), 'bottom-right');
+map.addControl(new maplibregl.ScaleControl({unit:'metric'}), 'bottom-right');
+
+// ---------- icons drawn on canvas ----------
+function icon(id, w, h, draw){ const c=document.createElement('canvas'); c.width=w; c.height=h; const g=c.getContext('2d'); draw(g,w,h); map.addImage(id, g.getImageData(0,0,w,h), {pixelRatio:1}); }
+function addIcons(){
+  const chev = (id, col, stroke) => icon(id, 48, 48, (g)=>{ g.lineWidth=9; g.lineCap='round'; g.lineJoin='round';
+    if(stroke){ g.strokeStyle=stroke; g.lineWidth=14; g.beginPath(); g.moveTo(14,10); g.lineTo(32,24); g.lineTo(14,38); g.stroke(); g.lineWidth=9; }
+    g.strokeStyle=col; g.beginPath(); g.moveTo(14,10); g.lineTo(32,24); g.lineTo(14,38); g.stroke(); });
+  chev('chev-w', '#ffffff'); chev('chev-c', '#ffffff', '#007a91');
+  for (const [k,c] of Object.entries(COLORS)) {
+    icon('b-'+k, 64, 64, g=>{ g.beginPath(); g.arc(32,32,29,0,7); g.fillStyle='rgba(0,0,0,.35)'; g.fill();
+      g.beginPath(); g.arc(32,32,27,0,7); g.fillStyle='#fff'; g.fill(); g.beginPath(); g.arc(32,32,22,0,7); g.fillStyle=c; g.fill(); });
+    icon('sq-'+k, 48, 48, g=>{ g.fillStyle='#fff'; g.fillRect(4,4,40,40); g.fillStyle=c; g.fillRect(9,9,30,30);
+      g.fillStyle='#fff'; g.font='bold 18px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('J',24,25); });
+  }
+  icon('warn', 48, 44, g=>{ g.beginPath(); g.moveTo(24,3); g.lineTo(46,41); g.lineTo(2,41); g.closePath(); g.fillStyle='#fff'; g.fill();
+    g.beginPath(); g.moveTo(24,9); g.lineTo(40,37); g.lineTo(8,37); g.closePath(); g.fillStyle='#ffc400'; g.fill();
+    g.fillStyle='#111'; g.font='bold 22px sans-serif'; g.textAlign='center'; g.fillText('!',24,35); });
+  const disc = (id, bg, txt) => icon(id, 48, 48, g=>{ g.beginPath(); g.arc(24,24,22,0,7); g.fillStyle='#fff'; g.fill(); g.beginPath(); g.arc(24,24,18,0,7); g.fillStyle=bg; g.fill();
+    g.fillStyle='#fff'; g.font='bold 17px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,24,25); });
+  disc('i-jump','#37474f','⤴'); disc('i-drop','#37474f','⤵'); disc('i-north','#6d4c41','▭');
+  icon('sign', 40, 40, g=>{ g.fillStyle='#fff'; g.fillRect(4,6,32,18); g.fillStyle='#ffd21f'; g.fillRect(7,9,26,12); g.fillStyle='#fff'; g.fillRect(17,24,6,14);
+    g.fillStyle='#111'; g.beginPath(); g.moveTo(26,15); g.lineTo(19,11); g.lineTo(19,19); g.fill(); g.fillRect(11,13.5,9,3); });
+  const hub = (id, txt) => icon(id, 72, 72, g=>{ g.beginPath(); g.arc(36,36,33,0,7); g.fillStyle='rgba(0,0,0,.35)'; g.fill(); g.beginPath(); g.arc(36,36,31,0,7); g.fillStyle='#fff'; g.fill();
+    g.beginPath(); g.arc(36,36,25,0,7); g.fillStyle='#111'; g.fill(); g.fillStyle='#ffd21f'; g.font='bold 30px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,36,38); });
+  hub('hub-d','D'); hub('hub-a','A');
+  // numbered start badges, drawn at 2x for crisp text
+  for (const sp of specials){
+    const c=document.createElement('canvas'); c.width=c.height=100; const g=c.getContext('2d');
+    g.beginPath(); g.arc(50,50,47,0,7); g.fillStyle='rgba(0,0,0,.35)'; g.fill();
+    g.beginPath(); g.arc(50,50,44,0,7); g.fillStyle='#fff'; g.fill();
+    g.beginPath(); g.arc(50,50,37,0,7); g.fillStyle=COLORS[sp.color]; g.fill();
+    g.fillStyle='#fff'; g.textAlign='center'; g.textBaseline='middle';
+    g.font=`800 ${sp.num.length>1?36:40}px "Segoe UI",Arial,sans-serif`; g.fillText(sp.num,50,53);
+    map.addImage('n-'+sp.num, g.getImageData(0,0,100,100), {pixelRatio:2});
+  }
+}
+map.on('styleimagemissing', e => {}); // icons are all added on load
+map.once('style.load', addIcons);
+
+// ---------- camera ----------
+let dim = '3d', zone = 'all';
+function cameraFor(z){
+  const list = specials.filter(ZONES[z].has);
+  const xs=[],ys=[]; for (const s of list) for (const c of s.coords){xs.push(c[0]);ys.push(c[1]);}
+  const b=[[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]];
+  const bearing = z==='all' ? 0 : uphillBearing(list);
+  return fitPitched(b, dim==='3d'?bearing:0, dim==='3d' ? (z==='all'?45:55) : 0);
+}
+// ski-map convention: look from the valley up the slopes (descents come toward the viewer)
+function uphillBearing(list){
+  let vx=0, vy=0;
+  for (const s of list){ if (s.kind!=='descent') continue;
+    const a=s.coords[0], b=s.coords[s.coords.length-1], w=Math.max(1, s.top-s.bottom);
+    const dx=(a[0]-b[0])*Math.cos(a[1]*Math.PI/180), dy=a[1]-b[1], n=Math.hypot(dx,dy)||1; vx+=w*dx/n; vy+=w*dy/n; }
+  return Math.round(Math.atan2(vx,vy)*180/Math.PI);
+}
+// cameraForBounds ignores pitch: iterate on the projected footprint until it fits the free area
+function fitPitched(b, bearing, pitch, extraPad){
+  const el = map.getContainer(), W = el.clientWidth, H = el.clientHeight;
+  const poster = document.body.classList.contains('poster');
+  const pad = {top: 70, right: 70, left: W<860 ? 30 : 70, bottom: poster && W>=860 ? 190 : 60};
+  if (extraPad) for (const k in pad) pad[k] += extraPad;
+  const [[x0,y0],[x1,y1]] = b;
+  const pts = []; for (let i=0;i<=4;i++) for (let j=0;j<=4;j++) pts.push([x0+(x1-x0)*i/4, y0+(y1-y0)*j/4]);
+  const saved = {center:map.getCenter(), zoom:map.getZoom(), bearing:map.getBearing(), pitch:map.getPitch()};
+  const c0 = map.cameraForBounds(b, {padding:pad, bearing}) || {center:[(x0+x1)/2,(y0+y1)/2], zoom:13};
+  let cam = {center:c0.center, zoom:c0.zoom, bearing, pitch};
+  for (let it=0; it<6; it++){
+    map.jumpTo(cam);
+    const P = pts.map(p => map.project(p));
+    const minX=Math.min(...P.map(p=>p.x)), maxX=Math.max(...P.map(p=>p.x)), minY=Math.min(...P.map(p=>p.y)), maxY=Math.max(...P.map(p=>p.y));
+    const aw=W-pad.left-pad.right, ah=H-pad.top-pad.bottom;
+    const s = Math.min(aw/(maxX-minX), ah/(maxY-minY));
+    const cx = (minX+maxX)/2, cy=(minY+maxY)/2, tx = pad.left+aw/2, ty = pad.top+ah/2;
+    const nc = map.unproject([W/2 + (cx-tx), H/2 + (cy-ty)]);
+    cam = {center:nc, zoom: Math.min(cam.zoom + Math.log2(s)*0.9, 17.5), bearing, pitch};
+  }
+  map.jumpTo(saved);
+  return cam;
+}
+function go(z, instant){
+  zone = z;
+  document.querySelectorAll('#zones button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.zone===z));
+  const cam = cameraFor(z);
+  instant ? map.jumpTo(cam) : map.flyTo({...cam, duration:1800, essential:true});
+  document.getElementById('posterSub').textContent = ZONES[z].name + ' — ' + ZONES[z].sub;
+  renderList();
+}
+document.getElementById('zones').addEventListener('click', e=>{ const b=e.target.closest('button'); if(b) { clearSel(); go(b.dataset.zone); } });
+document.getElementById('dim').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return; dim=b.dataset.v;
+  document.querySelectorAll('#dim button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+  map.setTerrain(dim==='3d' ? {source:'dem', exaggeration:1.5} : null);
+  go(zone);
+});
+document.getElementById('base').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('#base button').forEach(x=>x.setAttribute('aria-pressed', x===b));
+  const relief = b.dataset.v==='relief';
+  map.setLayoutProperty('ortho','visibility', relief?'none':'visible');
+  map.setPaintProperty('hill','raster-opacity', relief?0.95:0.28);
+  map.setPaintProperty('bg','background-color', relief?'#f3f1ea':'#dfe6dc');
+});
+document.getElementById('compass').onclick = ()=> map.easeTo({bearing:0});
+map.on('rotate', ()=> document.getElementById('needle').style.transform = `rotate(${-map.getBearing()}deg)`);
+
+// ---------- side panel ----------
+const fmtKm = m => m>=1000 ? (m/1000).toFixed(1).replace('.',',')+' km' : m+' m';
+function renderListKeep(){ document.getElementById('posterSub').textContent = ZONES[zone].name + ' — ' + ZONES[zone].sub; }
+function renderList(){
+  const el = document.getElementById('pane-pistes');
+  const list = specials.filter(ZONES[zone].has).sort((a,b)=>(+a.num)-(+b.num));
+  let html = '';
+  if (zone==='neupre') html += `<div class="note" style="margin:0 0 8px"><b>Secteur en cours de finalisation.</b> Les liaisons entre certaines spéciales (F1, R3, N4) ne sont pas encore cartographiées : suis le balisage sur place.</div>`;
+  for (const c of ORDER){
+    const g = list.filter(s=>s.color===c); if(!g.length) continue;
+    html += `<h2>${c==='mauve'?'Montées techniques (MT)':LABEL[c]} · ${g.length}</h2>`;
+    for (const s of g){
+      const meta = s.kind==='climb' ? `Montée · +${s.up} m` : s.kind==='loop' ? 'Boucle technique' : `${s.dn} m de descente · pente moy. ${String(s.avg).replace('.',',')} %`;
+      html += `<div class="trail" data-num="${s.num}"><div class="badge ${s.color}">${s.num}</div>
+        <div><div class="tname">${s.name}</div><div class="tmeta">${meta}</div></div><div class="tnum">${fmtKm(s.len)}</div></div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+document.getElementById('pane-pistes').addEventListener('click', e=>{
+  const r=e.target.closest('.trail'); if(r) select(r.dataset.num, true);
+  const back=e.target.closest('[data-back]'); if(back){ clearSel(); renderList(); }
+  const dl=e.target.closest('[data-gpx]'); if(dl){ const s=byNum[dl.dataset.gpx]; downloadGpx(gpxName(s), s.coords); }
+});
+
+function profileSvg(prof, color){
+  const W=340,H=96,p=6; const xs=prof.map(q=>q[0]), es=prof.map(q=>q[1]);
+  const x0=0,x1=Math.max(...xs), e0=Math.min(...es)-3, e1=Math.max(...es)+3;
+  const X=v=>p+(v-x0)/(x1-x0||1)*(W-2*p), Y=v=>H-p-(v-e0)/(e1-e0||1)*(H-2*p-14);
+  const d = prof.map((q,i)=>(i?'L':'M')+X(q[0]).toFixed(1)+','+Y(q[1]).toFixed(1)).join(' ');
+  return `<svg class="prof" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Profil d'altitude">
+    <path d="${d} L${X(x1)},${H-p} L${X(0)},${H-p} Z" fill="${color}" opacity=".16"/>
+    <path d="${d}" fill="none" stroke="${color}" stroke-width="2.2" vector-effect="non-scaling-stroke"/>
+    <text x="${p}" y="12" font-size="11" fill="currentColor" opacity=".7">${Math.round(es[0])} m</text>
+    <text x="${W-p}" y="12" font-size="11" text-anchor="end" fill="currentColor" opacity=".7">${Math.round(es[es.length-1])} m</text></svg>`;
+}
+let popup;
+function select(num, fly){
+  const s = byNum[num]; if(!s) return;
+  map.getSource('sel').setData(fc([line(s.coords, {color:s.color})]));
+  if (!ZONES[zone].has(s)) { zone = Object.keys(ZONES).find(k=>k!=='all' && ZONES[k].has(s)); renderListKeep(); document.querySelectorAll('#zones button').forEach(b=>b.setAttribute('aria-pressed', b.dataset.zone===zone)); }
+  const feats = Object.entries(s.feats||{}).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<span class="feat">${v} × ${FEAT[k]||k}</span>`).join('');
+  const isClimb = s.kind==='climb';
+  document.getElementById('pane-pistes').innerHTML = `
+    <button class="btn ghost" data-back style="margin-bottom:10px">← Toutes les pistes</button>
+    <div class="card">
+      <div class="head"><div class="badge ${s.color}">${s.num}</div><div><h3>${s.name}</h3><div class="tmeta">${LABEL[s.color]} · code ${s.id}</div></div></div>
+      <div class="stats">
+        <div class="stat"><b>${fmtKm(s.len)}</b><span>longueur</span></div>
+        <div class="stat"><b>${isClimb?'+'+s.up:'−'+s.dn} m</b><span>${isClimb?'dénivelé +':'dénivelé −'}</span></div>
+        <div class="stat"><b>${isClimb?Math.abs(s.avg):s.avg} %</b><span>pente moy.</span></div>
+        <div class="stat"><b>${isClimb?'—':s.max+' %'}</b><span>pente max*</span></div>
+      </div>
+      ${profileSvg(s.profile, COLORS[s.color])}
+      <div class="tmeta" style="margin:4px 0 8px">Départ ${s.top} m → arrivée ${s.bottom} m · altitudes LiDAR Wallonie 2021-22</div>
+      ${feats?`<div class="feats">${feats}</div>`:''}
+      <div class="row"><button class="btn" data-gpx="${s.num}">⬇ GPX</button></div>
+      <div class="tmeta" style="margin-top:10px">* pente la plus forte mesurée sur 40 m.</div>
+    </div>`;
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected', b.dataset.tab==='pistes'));
+  showPane('pistes');
+  if (fly){
+    const xs=s.coords.map(c=>c[0]), ys=s.coords.map(c=>c[1]);
+    const bearing = dim==='3d' ? bearingUphill(s) : 0;
+    const cam = fitPitched([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]], bearing, dim==='3d'?60:0, 40);
+    map.flyTo({...cam, zoom:Math.min(cam.zoom,17), duration:1600});
+  }
+}
+function bearingUphill(s){ const a=s.coords[0], b=s.coords[s.coords.length-1];
+  if (s.kind!=='descent') return map.getBearing();
+  const dx=(a[0]-b[0])*Math.cos(a[1]*Math.PI/180), dy=a[1]-b[1]; return Math.atan2(dx,dy)*180/Math.PI; }
+function clearSel(){ map.getSource('sel')?.setData(fc([])); }
+
+map.on('click', 'start-badge', e => select(e.features[0].properties.num, true));
+map.on('click', 'sp', e => { const p=e.features[0].properties; if(!p.variant) select(p.num, false); });
+for (const l of ['start-badge','sp','hub','stickers','warn','oneway','liaison']) {
+  map.on('mouseenter', l, ()=> map.getCanvas().style.cursor='pointer');
+  map.on('mouseleave', l, ()=> map.getCanvas().style.cursor='');
+}
+const pop = (e, html) => { popup?.remove(); popup = new maplibregl.Popup({closeButton:false, offset:12}).setLngLat(e.lngLat).setHTML(`<div class="popup">${html}</div>`).addTo(map); };
+map.on('click','oneway', e => { const p=e.features[0].properties; pop(e, `<h4>Montée balisée · sens unique</h4><p>${fmtKm(p.len)} · +${p.up} m. Suis les flèches.</p>`); });
+map.on('click','liaison', e => { const p=e.features[0].properties; pop(e, `<h4>Liaison balisée (jaune)</h4><p>Double sens · ${fmtKm(p.len)}. Partagée avec les promeneurs : roule cool.</p>`); });
+map.on('click','stickers', e => pop(e, `<h4>Carrefour balisé</h4><p>Direction des spéciales ${e.features[0].properties.text}</p>`));
+map.on('click','warn', e => pop(e, `<h4>Traversée</h4><p>Croisement route / chemin : ralentis.</p>`));
+new maplibregl.Marker({color:'#111'}).setLngLat([5.568842,50.578066]).setPopup(new maplibregl.Popup({offset:20}).setHTML('<div class="popup"><h4>Blanc Gravier (ADEPS)</h4><p>Allée des Sports 6. Liaison vers 8 & 9 : onglet Boucles GPS.</p></div>')).addTo(map);
+map.on('click','hub', e => pop(e, `<h4>${e.features[0].properties.t==='depart'?'Départ':'Arrivée'} balisé</h4><p>Secteur Seraing</p>`));
+
+// ---------- tours ----------
+function renderTours(){
+  const el = document.getElementById('pane-boucles');
+  let html = `<div class="note" style="margin:0 0 12px"><b>Pour le Kiox 300 :</b> télécharge le GPX d'une boucle, importe-le dans komoot sans le modifier, puis synchronise avec l'app <b>eBike Flow</b>. Les boucles enchaînent les spéciales dans le bon sens et remontent par les liaisons balisées.</div>`;
+  for (const t of (T.tours||[])){
+    const chips = t.order.map(n=>`<div class="badge ${byNum[n].color}">${n}</div>`).join('');
+    html += `<div class="tour" data-tour="${t.slug}"><b>${t.name}</b><div class="tmeta">${fmtKm(t.len)} · +${t.up} m${t.order.length?' · '+t.order.length+' spéciales':''}</div>
+      <div class="chips">${chips}</div><button class="btn" data-tgpx="${t.slug}">⬇ GPX de la boucle</button></div>`;
+  }
+  html += `<h2>Tout le réseau</h2><div class="row"><button class="btn ghost" id="allGpx">⬇ Toutes les pistes (1 fichier GPX)</button></div>`;
+  el.innerHTML = html;
+}
+document.getElementById('pane-boucles').addEventListener('click', e=>{
+  const g=e.target.closest('[data-tgpx]'); if(g){ const t=T.tours.find(x=>x.slug===g.dataset.tgpx); downloadGpx('Trail-Ardent_'+t.slug, t.coords, t.name); return; }
+  if (e.target.id==='allGpx'){ downloadAll(); return; }
+  const c=e.target.closest('.tour'); if(!c) return;
+  document.querySelectorAll('.tour').forEach(x=>x.classList.toggle('sel', x===c));
+  const t=T.tours.find(x=>x.slug===c.dataset.tour);
+  map.getSource('tour').setData(fc([line(t.coords,{})]));
+  const xs=t.coords.map(q=>q[0]), ys=t.coords.map(q=>q[1]);
+  const bearing = dim==='3d' ? uphillBearing(specials.filter(s=>s.zone===t.zone)) : 0;
+  const cam = fitPitched([[Math.min(...xs),Math.min(...ys)],[Math.max(...xs),Math.max(...ys)]], bearing, dim==='3d'?50:0);
+  map.flyTo({...cam, duration:1600});
+});
+
+// ---------- GPX ----------
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const gpxName = s => `Trail-Ardent_${s.num}_${s.id}_${s.name}`.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w-]+/g,'-');
+function gpxTrk(name, coords){ return `<trk><name>${esc(name)}</name><trkseg>` + coords.map(c=>`<trkpt lat="${c[1]}" lon="${c[0]}">${c[2]!=null?`<ele>${c[2]}</ele>`:''}</trkpt>`).join('') + `</trkseg></trk>`; }
+function gpxDoc(trks){ return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Trail Ardent – plan des pistes" xmlns="http://www.topografix.com/GPX/1/1">${trks}</gpx>`; }
+function save(name, text){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type:'application/gpx+xml'})); a.download=name+'.gpx'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000); }
+function downloadGpx(name, coords, title){ save(name, gpxDoc(gpxTrk(title||name.replace(/_/g,' '), coords))); }
+function downloadAll(){ save('Trail-Ardent_toutes-les-pistes', gpxDoc(specials.map(s=>gpxTrk(`${s.num} · ${s.name} (${LABEL[s.color]})`, s.coords)).join(''))); }
+
+// ---------- legend ----------
+function legendHtml(compact){
+  const b = c => `<div class="badge ${c}">${compact?'':'12'}</div>`;
+  return `
+    ${ORDER.map(c=>`<div class="lg"><span class="sw" style="background:${COLORS[c]}"></span>${c==='mauve'?'Montée technique (MT)':LABEL[c]}</div>`).join('')}
+    <div class="lg"><span class="sw climb"></span>Montée balisée · sens unique</div>
+    <div class="lg"><span class="sw dash"></span>Liaison balisée · double sens</div>
+    <div class="lg"><span class="sw" style="background:repeating-linear-gradient(90deg,#111 0 7px,#fff 7px 11px)"></span>Accès ADEPS Blanc Gravier</div>`;
+}
+document.getElementById('pane-legende').innerHTML = `
+  <h2>Pistes</h2><div class="legend">${legendHtml()}</div>
+  <h2>Repères</h2><div class="legend">
+    <div class="lg"><div class="badge rouge">11</div>Départ de la spéciale n° 11 (numéro du balisage)</div>
+    <div class="lg"><span style="width:28px;display:grid;place-items:center"><span style="width:12px;height:12px;border-radius:50%;border:3px solid var(--rouge);background:#fff"></span></span>Arrivée de la spéciale</div>
+    <div class="lg"><span style="width:28px;text-align:center;font-weight:900">›</span>Sens de circulation (flèches blanches)</div>
+    <div class="lg"><span style="width:28px;text-align:center">⚠️</span>Traversée de route / chemin</div>
+    <div class="lg"><span style="width:28px;text-align:center">🪧</span>Carrefour balisé (ex. « → 1–26 »)</div>
+    <div class="lg"><span style="width:28px;text-align:center;font-weight:800">D</span>Départ / Arrivée balisés (Seraing)</div>
+    <div class="lg"><span style="width:28px;text-align:center;font-weight:800;color:#fff;background:#2a5db0;border-radius:4px">P</span>Parking (OpenStreetMap)</div>
+  </div>
+  <div class="note"><b>Comment lire le plan ?</b> Chaque spéciale commence à son rond numéroté et se descend dans le sens des flèches. On remonte par les <b>montées orange</b> (sens unique) ou les <b>liaisons jaunes</b>. Les numéros correspondent aux panneaux sur le terrain.</div>
+  <div class="note">Tracés : carte de travail Trail Ardent. Altitudes, dénivelés et pentes calculés sur le LiDAR 50 cm de Wallonie (2021-22). Relief 3D : Mapterhorn, exagéré ×1,5. Trail center en finalisation : le balisage sur place fait foi.</div>`;
+document.getElementById('posterLegend').innerHTML = legendHtml(true);
+
+function showPane(t){ for (const p of ['pistes','boucles','legende']) document.getElementById('pane-'+p).hidden = p!==t; }
+document.querySelector('.tabs').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected', x===b));
+  showPane(b.dataset.tab);
+  if (b.dataset.tab!=='boucles'){ map.getSource('tour')?.setData(fc([])); document.querySelectorAll('.tour').forEach(x=>x.classList.remove('sel')); }
+});
+
+// ---------- poster / export ----------
+document.getElementById('posterBtn').onclick = ()=>{ document.body.classList.toggle('poster'); setTimeout(()=>{ map.resize(); go(zone, true); }, 50); };
+document.addEventListener('keydown', e=>{ if(e.key==='Escape' && document.body.classList.contains('poster')) document.getElementById('posterBtn').click(); });
+document.getElementById('pngBtn').onclick = exportPng;
+async function exportPng(){
+  await new Promise(r => map.loaded() ? r() : map.once('idle', r));
+  map.triggerRepaint(); await new Promise(r => map.once('render', r));
+  const src = map.getCanvas(); const W=src.width, H=src.height, k=window.devicePixelRatio||1;
+  const c=document.createElement('canvas'); c.width=W; c.height=H; const g=c.getContext('2d'); g.drawImage(src,0,0);
+  drawCartouche(g, W, H, k);
+  const a=document.createElement('a'); a.download=`Trail-Ardent_${zone}.png`; a.href=c.toDataURL('image/png'); a.click();
+}
+function drawCartouche(g, W, H, k){
+  const items = [...ORDER.map(c=>[COLORS[c], c==='mauve'?'Montée technique (MT)':LABEL[c], 'solid']), ['#ff8a00','Montée · sens unique','climb'], ['#ffd21f','Liaison · double sens','dash']];
+  const pad=16*k, colW=190*k, rowH=22*k, cols=3, rows=Math.ceil(items.length/cols);
+  const w=pad*2+cols*colW, h=pad*2+44*k+rows*rowH, x=16*k, y=H-h-16*k;
+  g.save(); g.fillStyle='rgba(255,255,255,.95)'; g.shadowColor='rgba(0,0,0,.3)'; g.shadowBlur=12*k;
+  roundRect(g,x,y,w,h,16*k); g.fill(); g.shadowBlur=0;
+  g.fillStyle='#16191d'; g.font=`700 ${20*k}px "Segoe UI",sans-serif`; g.fillText('TRAIL ARDENT', x+pad, y+pad+16*k);
+  g.fillStyle='#4b545e'; g.font=`${12.5*k}px "Segoe UI",sans-serif`; g.fillText(ZONES[zone].name+' — '+ZONES[zone].sub, x+pad, y+pad+34*k);
+  items.forEach((it,i)=>{ const cx=x+pad+(i%cols)*colW, cy=y+pad+44*k+Math.floor(i/cols)*rowH+8*k;
+    g.lineCap='round'; g.lineWidth=7*k; g.strokeStyle=it[2]==='dash'?'#2b2b2b':'#fff'; g.beginPath(); g.moveTo(cx,cy); g.lineTo(cx+30*k,cy); g.stroke();
+    g.lineWidth=it[2]==='dash'?3.5*k:4.5*k; g.strokeStyle=it[0]; if(it[2]==='dash') g.setLineDash([6*k,4*k]); g.beginPath(); g.moveTo(cx,cy); g.lineTo(cx+30*k,cy); g.stroke(); g.setLineDash([]);
+    g.fillStyle='#16191d'; g.font=`${12.5*k}px "Segoe UI",sans-serif`; g.fillText(it[1], cx+40*k, cy+4.5*k); });
+  g.restore();
+}
+function roundRect(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+
+// re-frame on resize as long as the visitor has not moved the map himself
+let userMoved = false, rT;
+for (const ev of ['dragstart','zoomstart','rotatestart','pitchstart']) map.on(ev, e => { if (e.originalEvent) userMoved = true; });
+const _go = go; go = (z, instant) => { userMoved = false; _go(z, instant); };
+map.on('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (!userMoved) _go(zone, true); }, 250); });
+
+// ---------- boot ----------
+const qs = new URLSearchParams(location.search);
+map.once('load', ()=>{
+  renderTours();
+  if (qs.get('dim')==='2d') document.querySelector('#dim [data-v="2d"]').click();
+  if (qs.get('poster')) document.body.classList.add('poster');
+  map.resize();
+  go(qs.get('zone') || 'all', true);
+  if (qs.get('sel')) select(qs.get('sel'), true);
+  map.once('idle', ()=>{ if(!qs.get('sel')) go(zone, true); map.once('idle', ()=> document.body.dataset.ready = '1'); });
+});
+renderList();
+</script>
+</body>
+</html>
