@@ -128,6 +128,22 @@ body.side #side{display:flex;flex-direction:column;background:#fff;color:#16191d
 #side .r small{color:#7a838d;display:block;font-size:11.5px}
 #side .foot{margin-top:auto;font-size:11.5px;color:#7a838d;line-height:1.45;padding-top:14px}
 #side .tip{background:#f2f4f6;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.4;margin-top:14px}
+
+#gpsBtn{position:absolute;left:12px;bottom:34px;z-index:3;display:flex;align-items:center;gap:8px;border:0;border-radius:999px;background:#16191d;color:#fff;font:inherit;font-weight:700;font-size:15px;padding:12px 18px 12px 14px;box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:pointer}
+#gpsBtn.on{background:#1b5fd1}
+#gpsBtn.wait{background:#5d6672}
+#gpsBtn.recenter{background:#ff8a00}
+@media (max-width:860px){ body.riding #app{grid-template-rows:auto 1fr 0} body.riding aside{display:none} body.riding #gpsInfo{bottom:84px} }
+#gpsBtn svg{flex:none}
+#gpsInfo{position:absolute;left:12px;right:12px;bottom:92px;z-index:3;display:none;background:rgba(255,255,255,.96);color:#16191d;border-radius:14px;padding:10px 14px;box-shadow:0 2px 10px rgba(0,0,0,.25);font-size:14px;line-height:1.35;max-width:420px}
+#gpsInfo.show{display:block}
+#gpsInfo b{font-size:15px}
+#gpsInfo .badge{display:inline-grid;width:22px;height:22px;font-size:10.5px;border-width:1.5px;vertical-align:-5px;margin-right:4px}
+body.poster #gpsBtn, body.poster #gpsInfo{display:none !important}
+
+.headcone{width:120px;height:120px;pointer-events:none}
+#gpsInfo label{display:flex;align-items:center;gap:8px;margin-top:6px;font-weight:600}
+#gpsInfo input{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -155,6 +171,8 @@ body.side #side{display:flex;flex-direction:column;background:#fff;color:#16191d
       <div class="seg"><button id="posterBtn" aria-pressed="false" title="Masquer l'interface pour une capture">Mode affiche</button></div>
       <div class="seg"><button id="pngBtn" aria-pressed="false" title="Télécharger la vue en image">Exporter PNG</button></div>
     </div>
+    <button id="gpsBtn" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor"/><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3" stroke="currentColor" stroke-width="2"/></svg><span>Ma position</span></button>
+    <div id="gpsInfo" role="status"></div>
     <button class="compass" id="compass" title="Remettre le nord en haut"><svg width="22" height="22" viewBox="0 0 24 24" id="needle"><path d="M12 2 L16 12 L12 10.5 L8 12 Z" fill="#e0262b"/><path d="M12 22 L8 12 L12 13.5 L16 12 Z" fill="#888"/></svg></button>
     <div class="poster-title" id="posterTitle">
       <h2>TRAIL ARDENT</h2>
@@ -329,7 +347,8 @@ const map = new maplibregl.Map({
 });
 window.TAmap = map;
 map.addControl(new maplibregl.NavigationControl({visualizePitch:true, showCompass:false}), 'bottom-right');
-map.addControl(new maplibregl.GeolocateControl({positionOptions:{enableHighAccuracy:true}, trackUserLocation:true, showAccuracyCircle:true}), 'bottom-right');
+const geo = new maplibregl.GeolocateControl({positionOptions:{enableHighAccuracy:true, maximumAge:5000, timeout:20000}, trackUserLocation:true, showAccuracyCircle:true, fitBoundsOptions:{maxZoom:16.5}});
+map.addControl(geo, 'bottom-right');
 map.addControl(new maplibregl.ScaleControl({unit:'metric'}), 'bottom-right');
 
 // ---------- icons drawn on canvas ----------
@@ -622,7 +641,7 @@ function roundRect(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x
 let userMoved = false, rT;
 for (const ev of ['dragstart','zoomstart','rotatestart','pitchstart']) map.on(ev, e => { if (e.originalEvent) userMoved = true; });
 const _go = go; go = (z, instant) => { userMoved = false; _go(z, instant); };
-map.on('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (!userMoved) _go(zone, true); }, 250); });
+map.on('resize', () => { clearTimeout(rT); rT = setTimeout(() => { if (!userMoved && !(typeof tracking!=='undefined' && tracking)) _go(zone, true); }, 250); });
 
 
 function renderSide(){
@@ -652,6 +671,98 @@ function renderSide(){
     <div class="tip"><b>Comment lire le plan ?</b> On descend chaque spéciale depuis son rond numéroté, dans le sens des flèches blanches. On remonte par les montées orange ou les liaisons jaunes. Les numéros sont ceux des panneaux sur le terrain.</div>
     <div class="foot">Vue 3D depuis la vallée, relief exagéré ×1,5. Altitudes et dénivelés : LiDAR Wallonie 2021-22. Orthophoto été 2023 © SPW – WalOnMap · Relief © Mapterhorn · © OpenStreetMap. Trail center en finalisation : le balisage sur place fait foi.</div>`;
 }
+
+
+// ---------- GPS: where am I, nearest special ----------
+const gpsBtn = document.getElementById('gpsBtn'), gpsInfo = document.getElementById('gpsInfo');
+let tracking = false, following = false, resizing = false;
+function setGps(state, label){ gpsBtn.className = state; gpsBtn.querySelector('span').textContent = label; }
+gpsBtn.onclick = () => {
+  if (!('geolocation' in navigator)) { gpsInfo.innerHTML = 'La localisation n’est pas disponible sur cet appareil.'; gpsInfo.classList.add('show'); return; }
+  if (tracking) {
+    if (!following) { geo.trigger(); }                       // background -> follow & recenter
+    else if (lastPos) map.easeTo({center: lastPos.p, zoom: Math.max(map.getZoom(), 16), duration: 600});
+    return;
+  }
+  setGps('wait', 'Recherche GPS…');
+  startCompass();
+  if (dim==='3d') document.querySelector('#dim [data-v="2d"]').click();  // 2D is easier to read while riding
+  geo.trigger();
+};
+geo.on('geolocate', e => {
+  tracking = true; setGps('on', 'Position suivie');
+  const p = [e.coords.longitude, e.coords.latitude];
+  let best = null;
+  for (const sp of specials){ const d = dist2(p, sp.coords[0]); if (!best || d < best.d) best = {d, sp}; }
+  // distance to the nearest point of any trail
+  let onTrail = null;
+  for (const sp of specials){ for (let i=0;i<sp.coords.length;i+=3){ const d = dist2(p, sp.coords[i]); if (!onTrail || d < onTrail.d) onTrail = {d, sp}; } }
+  const fmt = d => d < 1000 ? Math.round(d/10)*10 + ' m' : (d/1000).toFixed(1).replace('.',',') + ' km';
+  let html = `<b>Départ le plus proche :</b> <span class="badge ${best.sp.color}">${best.sp.num}</span>${best.sp.name} · à ${fmt(best.d)}`;
+  if (onTrail && onTrail.d < 25) html = `<b>Tu es sur la spéciale</b> <span class="badge ${onTrail.sp.color}">${onTrail.sp.num}</span>${onTrail.sp.name}<br>` + html;
+  if (best.d > 15000) html = 'Tu es loin du Trail Ardent (' + fmt(best.d) + ').';
+  html += `<br><span style="color:#5d6672;font-size:12.5px">Précision ± ${Math.round(e.coords.accuracy)} m</span>`;
+  gpsInfo.innerHTML = html; gpsInfo.classList.add('show');
+});
+geo.on('trackuserlocationend', () => {   // map moved by hand, or GPS switched off
+  if (resizing && geo._watchState !== 'OFF') { setTimeout(()=>geo.trigger(), 120); return; }   // layout change, not the rider
+  following = false;
+  if (geo._watchState === 'OFF') { document.body.classList.remove('riding'); setTimeout(()=>map.resize(), 50); tracking = false; setGps('', 'Ma position'); gpsInfo.classList.remove('show'); coneMarker && coneMarker.remove(); coneMarker = null; }
+  else setGps('wait recenter', 'Recentrer');
+});
+geo.on('trackuserlocationstart', () => { following = true; setGps('on', 'Position suivie'); if (!document.body.classList.contains('riding')) { document.body.classList.add('riding'); resizing = true; setTimeout(()=>{ map.resize(); resizing = false; if (lastPos) map.jumpTo({center:lastPos.p}); }, 50); } });
+geo.on('error', err => {
+  tracking = false; setGps('', 'Ma position');
+  gpsInfo.innerHTML = err.code === 1 ? '<b>Localisation refusée.</b> Autorise la position pour ce site dans les réglages du navigateur, puis réessaie.' : 'Position GPS introuvable pour l’instant. Réessaie à découvert.';
+  gpsInfo.classList.add('show');
+});
+
+
+// ---------- heading: compass (phone orientation) + GPS course when moving ----------
+let heading = null, lastPos = null, followHeading = false, coneMarker = null, compassOn = false;
+const coneEl = document.createElement('div');
+coneEl.innerHTML = `<svg class="headcone" viewBox="0 0 120 120"><defs><radialGradient id="cg" cx="60" cy="60" r="58" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#1b5fd1" stop-opacity=".75"/><stop offset="1" stop-color="#1b5fd1" stop-opacity="0"/></radialGradient></defs><path d="M60 60 L33 6 A58 58 0 0 1 87 6 Z" fill="url(#cg)"/></svg>`;
+function startCompass(){
+  if (compassOn) return;
+  const onOri = e => {
+    let h = null;
+    if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;               // iOS: degrees from north
+    else if (e.absolute && typeof e.alpha === 'number') h = 360 - e.alpha;                     // Android absolute
+    if (h == null) return;
+    const so = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    setHeading((h + so + 360) % 360, false);
+  };
+  const go2 = () => { compassOn = true;
+    if ('ondeviceorientationabsolute' in window) window.addEventListener('deviceorientationabsolute', onOri, true);
+    else window.addEventListener('deviceorientation', onOri, true); };
+  if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(r => { if (r === 'granted') go2(); }).catch(()=>{});
+  } else go2();
+}
+let lastRot = 0;
+function setHeading(h, fromGps){
+  // smooth the compass a bit; GPS course wins while moving
+  if (!fromGps && lastPos && lastPos.speed > 2) return;
+  heading = heading == null ? h : heading + ((((h - heading) % 360) + 540) % 360 - 180) * 0.35;
+  heading = (heading + 360) % 360;
+  if (coneMarker) coneMarker.setRotation(heading);
+  const now = performance.now();
+  if (followHeading && now - lastRot > 250) { lastRot = now; map.easeTo({bearing: heading, duration: 250}); }
+}
+geo.on('geolocate', e => {
+  const p = [e.coords.longitude, e.coords.latitude];
+  lastPos = {p, speed: e.coords.speed || 0};
+  if (!coneMarker) coneMarker = new maplibregl.Marker({element: coneEl, rotationAlignment: 'map', pitchAlignment: 'map'}).setLngLat(p).addTo(map);
+  else coneMarker.setLngLat(p);
+  if (typeof e.coords.heading === 'number' && !isNaN(e.coords.heading) && (e.coords.speed || 0) > 2) setHeading(e.coords.heading, true);
+  if (heading != null) coneMarker.setRotation(heading);
+  if (!document.getElementById('followHd')) {
+    gpsInfo.insertAdjacentHTML('beforeend', `<label><input type="checkbox" id="followHd"> Orienter la carte dans mon sens</label><a href="#" id="gpsOff" style="display:inline-block;margin-top:6px;color:#5d6672;font-size:12.5px">Arrêter le GPS</a>`);
+  }
+  document.getElementById('gpsOff').onclick = ev => { ev.preventDefault(); if (following) geo.trigger(); else { geo.trigger(); setTimeout(()=>geo.trigger(), 50); } };
+  const cb = document.getElementById('followHd'); cb.checked = followHeading;
+  cb.onchange = () => { followHeading = cb.checked; if (!followHeading) map.easeTo({bearing:0}); else if (heading!=null) map.easeTo({bearing:heading}); };
+});
 
 // ---------- boot ----------
 const qs = new URLSearchParams(location.search);
